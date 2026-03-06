@@ -38,7 +38,7 @@ export default function FaqGeneratorForm() {
             autoFocus
             disabled={isPending}
           />
-          {state?.error && (
+          {state && state.success === false && (
             <div className="flex items-center gap-2 mt-4 text-red-600 text-sm">
               <AlertTriangle className="h-4 w-4" /> {state.error}
             </div>
