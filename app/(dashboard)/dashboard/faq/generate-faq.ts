@@ -11,6 +11,21 @@ export type FAQResult =
   | { success: true; faqs: FAQItem[]; schema: string }
   | { success: false; error: string };
 
+// Helper: robustly extract the first JSON array from text (even with markdown/code blocks)
+function extractJsonArray(text: string): string | null {
+  // Remove markdown code block wrapper
+  let raw = text.trim();
+  if (raw.startsWith("```")) {
+    // strip triple-backtick code block
+    raw = raw.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
+  }
+  // Find first "[" and last "]"
+  const start = raw.indexOf("[");
+  const end = raw.lastIndexOf("]");
+  if (start === -1 || end === -1 || start > end) return null;
+  return raw.slice(start, end + 1);
+}
+
 export async function generateFaqAction(prevState: any, formData: FormData): Promise<FAQResult> {
   const rawUrl = formData.get("url");
   const parse = openaiFaqSchema.safeParse({ url: rawUrl });
@@ -37,9 +52,7 @@ HTML/Text:
 ${html.slice(0, 6500)}
 `;
 
-
   try {
-    // You must set OPENAI_API_KEY in your environment for this to work
     const openAiKey = process.env.OPENAI_API_KEY;
     if (!openAiKey) {
       return { success: false, error: "AI key missing in environment. Contact support." };
@@ -62,12 +75,34 @@ ${html.slice(0, 6500)}
     });
     const json = await completion.json();
 
-    const aiResult = json.choices?.[0]?.message?.content || "";
+    let aiResult = json.choices?.[0]?.message?.content || "";
     let faqs: FAQItem[] = [];
+    let parsed = false;
+
+    // Try direct parse
     try {
       faqs = JSON.parse(aiResult);
-    } catch (e) {
-      return { success: false, error: "AI returned unrecognized format. Please try another page, or contact support." };
+      parsed = Array.isArray(faqs);
+    } catch {}
+
+    // Attempt to extract and parse just the array (for wrapped/codeblock/extra-text outputs)
+    if (!parsed) {
+      const arrTxt = extractJsonArray(aiResult);
+      if (arrTxt) {
+        try {
+          faqs = JSON.parse(arrTxt);
+          parsed = Array.isArray(faqs);
+        } catch {}
+      }
+    }
+
+    // Final error if no valid array
+    if (!parsed) {
+      return {
+        success: false,
+        error:
+          "AI returned an unrecognized/improper format. Please try another page or contact support (raw output was not strictly parseable)."
+      };
     }
 
     // Generate JSON-LD schema for Google FAQPage
