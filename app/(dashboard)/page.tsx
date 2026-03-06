@@ -19,11 +19,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { Terminal } from './terminal';
-
-function CurrentYear() {
-  'use client';
-  return <>{new Date().getFullYear()}</>;
-}
+import CurrentYear from '@/components/CurrentYear';
 
 export default function HomePage() {
   return (
